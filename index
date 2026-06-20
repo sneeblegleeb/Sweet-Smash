@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sweet Cascade - Infinite Match 3</title>
+<style>
+  :root {
+    --bg1: #21142f;
+    --bg2: #5c2b7a;
+    --panel: rgba(255,255,255,.13);
+    --panel2: rgba(255,255,255,.2);
+    --text: #fff6ff;
+    --muted: #dbc7e8;
+    --tile: 60px;
+    --gap: 7px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: ui-rounded, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: var(--text);
+    background:
+      radial-gradient(circle at top left, rgba(255,209,102,.35), transparent 28%),
+      radial-gradient(circle at bottom right, rgba(6,214,160,.25), transparent 30%),
+      linear-gradient(135deg, var(--bg1), var(--bg2));
+    display: grid;
+    place-items: center;
+    overflow-x: hidden;
+  }
+  .wrap {
+    width: min(100vw, 760px);
+    padding: 18px;
+  }
+  .top {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 14px;
+  }
+  h1 {
+    margin: 0;
+    font-size: clamp(30px, 7vw, 54px);
+    line-height: .9;
+    letter-spacing: -2px;
+    text-shadow: 0 5px 0 rgba(0,0,0,.16);
+  }
+  .subtitle { color: var(--muted); margin-top: 7px; font-weight: 700; }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(72px, 1fr));
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .card, .controls, .modalBox {
+    background: var(--panel);
+    border: 1px solid rgba(255,255,255,.22);
+    border-radius: 20px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.25), inset 0 1px rgba(255,255,255,.15);
+    backdrop-filter: blur(10px);
+  }
+  .card { padding: 10px 12px; text-align: center; }
+  .label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); font-weight: 900; }
+  .value { font-size: 24px; font-weight: 1000; margin-top: 2px; }
+  .gameArea {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  #board {
+    position: relative;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(8, var(--tile));
+    grid-template-rows: repeat(8, var(--tile));
+    gap: var(--gap);
+    padding: var(--gap);
+    border-radius: 24px;
+    background: rgba(0,0,0,.25);
+    border: 1px solid rgba(255,255,255,.2);
+    box-shadow: inset 0 0 0 2px rgba(255,255,255,.08), 0 18px 45px rgba(0,0,0,.3);
+    touch-action: none;
+    user-select: none;
+  }
+  .tile {
+    width: var(--tile);
+    height: var(--tile);
+    border: 0;
+    border-radius: 18px;
+    cursor: pointer;
+    font-size: calc(var(--tile) * .52);
+    display: grid;
+    place-items: center;
+    background: linear-gradient(145deg, rgba(255,255,255,.55), rgba(255,255,255,.08));
+    box-shadow: inset 0 4px 10px rgba(255,255,255,.38), inset 0 -7px 13px rgba(0,0,0,.16), 0 7px 0 rgba(0,0,0,.14);
+    transition: transform .13s ease, filter .13s ease, opacity .2s ease;
+  }
+  .tile:hover { transform: translateY(-2px) scale(1.03); filter: brightness(1.1); }
+  .tile.selected { outline: 4px solid #fff; transform: scale(1.08); filter: saturate(1.4) brightness(1.18); }
+  .tile.pop { transform: scale(.05) rotate(25deg); opacity: 0; }
+  .tile.drop { animation: drop .18s ease-out; }
+  @keyframes drop { from { transform: translateY(-22px); opacity: .2; } to { transform: translateY(0); opacity: 1; } }
+  .controls { padding: 12px; display: grid; gap: 10px; }
+  .goalRow { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; align-items: center; }
+  .goal {
+    font-size: 17px;
+    font-weight: 900;
+  }
+  .hint { color: var(--muted); font-size: 13px; line-height: 1.35; }
+  button.action {
+    border: 0;
+    color: #43204f;
+    background: linear-gradient(180deg, #fff0a6, #ffbf4b);
+    font-weight: 1000;
+    border-radius: 15px;
+    padding: 11px 16px;
+    cursor: pointer;
+    box-shadow: 0 7px 0 rgba(0,0,0,.18);
+  }
+  button.action:active { transform: translateY(3px); box-shadow: 0 4px 0 rgba(0,0,0,.18); }
+  .progressOuter { height: 16px; background: rgba(0,0,0,.26); border-radius: 999px; overflow: hidden; border: 1px solid rgba(255,255,255,.18); }
+  #progressBar { height: 100%; width: 0%; background: linear-gradient(90deg, #06d6a0, #ffd166); border-radius: inherit; transition: width .25s ease; }
+  .modal {
+    position: fixed; inset: 0; display: none; place-items: center; padding: 20px;
+    background: rgba(20,7,28,.62); backdrop-filter: blur(6px); z-index: 5;
+  }
+  .modal.show { display: grid; }
+  .modalBox { width: min(92vw, 460px); padding: 24px; text-align: center; }
+  .modalBox h2 { margin: 0 0 8px; font-size: 38px; }
+  .modalBox p { color: var(--muted); font-weight: 700; }
+  @media (max-width: 560px) {
+    :root { --tile: min(10.7vw, 52px); --gap: 5px; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .top { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <h1>Sweet Cascade</h1>
+        <div class="subtitle">An infinite match‑3 candy puzzle</div>
+      </div>
+      <button class="action" id="newGameBtn">New Game</button>
+    </div>
+
+    <div class="stats">
+      <div class="card"><div class="label">Level</div><div class="value" id="levelEl">1</div></div>
+      <div class="card"><div class="label">Score</div><div class="value" id="scoreEl">0</div></div>
+      <div class="card"><div class="label">Target</div><div class="value" id="targetEl">750</div></div>
+      <div class="card"><div class="label">Moves</div><div class="value" id="movesEl">20</div></div>
+    </div>
+
+    <div class="gameArea">
+      <div id="board" aria-label="Game board"></div>
+      <div class="controls">
+        <div class="goalRow">
+          <div class="goal" id="goalText">Reach the target before moves run out.</div>
+          <button class="action" id="shuffleBtn">Shuffle</button>
+        </div>
+        <div class="progressOuter"><div id="progressBar"></div></div>
+        <div class="hint">Click or tap one candy, then an adjacent candy to swap. Matches of 4+ create bigger chain bonuses. Each level raises the target, trims moves over time, and adds more candy variety.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="modal">
+    <div class="modalBox">
+      <h2 id="modalTitle">Level Clear!</h2>
+      <p id="modalText">Nice work.</p>
+      <button class="action" id="modalBtn">Next Level</button>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const SIZE = 8;
+  const candies = ['🍒','🍋','🍇','🍬','🍭','🧁','🍫','🍩'];
+  const boardEl = document.getElementById('board');
+  const levelEl = document.getElementById('levelEl');
+  const scoreEl = document.getElementById('scoreEl');
+  const targetEl = document.getElementById('targetEl');
+  const movesEl = document.getElementById('movesEl');
+  const progressBar = document.getElementById('progressBar');
+  const modal = document.getElementById('modal');
+  const modalTitle = document.getElementById('modalTitle');
+  const modalText = document.getElementById('modalText');
+  const modalBtn = document.getElementById('modalBtn');
+  const newGameBtn = document.getElementById('newGameBtn');
+  const shuffleBtn = document.getElementById('shuffleBtn');
+
+  let grid = [];
+  let selected = null;
+  let level = 1;
+  let score = 0;
+  let target = 750;
+  let moves = 20;
+  let busy = false;
+  let available = 5;
+
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  const randCandy = () => Math.floor(Math.random() * available);
+  const idx = (r,c) => r * SIZE + c;
+  const inBounds = (r,c) => r >= 0 && c >= 0 && r < SIZE && c < SIZE;
+  const adjacent = (a,b) => Math.abs(a.r-b.r) + Math.abs(a.c-b.c) === 1;
+
+  function difficultyFor(lvl) {
+    available = Math.min(5 + Math.floor((lvl - 1) / 4), candies.length);
+    target = Math.round(650 + lvl * 220 + Math.pow(lvl, 1.35) * 95);
+    moves = Math.max(10, 22 - Math.floor(lvl / 3));
+  }
+
+  function startLevel(lvl) {
+    level = lvl;
+    difficultyFor(level);
+    score = 0;
+    selected = null;
+    busy = false;
+    makeBoard();
+    render();
+    resolveInitialMatches();
+  }
+
+  function makeBoard() {
+    grid = Array.from({ length: SIZE }, () => Array(SIZE).fill(0));
+    for (let r = 0; r < SIZE; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        let val;
+        do { val = randCandy(); }
+        while ((c >= 2 && grid[r][c-1] === val && grid[r][c-2] === val) ||
+               (r >= 2 && grid[r-1][c] === val && grid[r-2][c] === val));
+        grid[r][c] = val;
+      }
+    }
+  }
+
+  function render(popSet = new Set(), dropSet = new Set()) {
+    boardEl.innerHTML = '';
+    for (let r = 0; r < SIZE; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        const btn = document.createElement('button');
+        btn.className = 'tile';
+        btn.type = 'button';
+        btn.dataset.r = r;
+        btn.dataset.c = c;
+        btn.textContent = grid[r][c] == null ? '' : candies[grid[r][c]];
+        const key = `${r},${c}`;
+        if (selected && selected.r === r && selected.c === c) btn.classList.add('selected');
+        if (popSet.has(key)) btn.classList.add('pop');
+        if (dropSet.has(key)) btn.classList.add('drop');
+        btn.addEventListener('click', onTileClick);
+        boardEl.appendChild(btn);
+      }
+    }
+    levelEl.textContent = level;
+    scoreEl.textContent = score.toLocaleString();
+    targetEl.textContent = target.toLocaleString();
+    movesEl.textContent = moves;
+    progressBar.style.width = `${Math.min(100, score / target * 100)}%`;
+  }
+
+  function onTileClick(e) {
+    if (busy) return;
+    const r = +e.currentTarget.dataset.r;
+    const c = +e.currentTarget.dataset.c;
+    const clicked = { r, c };
+    if (!selected) {
+      selected = clicked;
+      render();
+      return;
+    }
+    if (selected.r === r && selected.c === c) {
+      selected = null;
+      render();
+      return;
+    }
+    if (!adjacent(selected, clicked)) {
+      selected = clicked;
+      render();
+      return;
+    }
+    swapAndResolve(selected, clicked);
+  }
+
+  async function swapAndResolve(a, b) {
+    busy = true;
+    swap(a,b);
+    selected = null;
+    render();
+    await wait(120);
+    const matches = findMatches();
+    if (matches.size === 0) {
+      swap(a,b);
+      render();
+      busy = false;
+      return;
+    }
+    moves--;
+    await cascade(matches, true);
+    checkLevelState();
+    busy = false;
+  }
+
+  function swap(a,b) {
+    const t = grid[a.r][a.c];
+    grid[a.r][a.c] = grid[b.r][b.c];
+    grid[b.r][b.c] = t;
+  }
+
+  function findMatches() {
+    const set = new Set();
+    for (let r = 0; r < SIZE; r++) {
+      let run = 1;
+      for (let c = 1; c <= SIZE; c++) {
+        if (c < SIZE && grid[r][c] != null && grid[r][c] === grid[r][c-1]) run++;
+        else {
+          if (run >= 3) for (let k = c - run; k < c; k++) set.add(`${r},${k}`);
+          run = 1;
+        }
+      }
+    }
+    for (let c = 0; c < SIZE; c++) {
+      let run = 1;
+      for (let r = 1; r <= SIZE; r++) {
+        if (r < SIZE && grid[r][c] != null && grid[r][c] === grid[r-1][c]) run++;
+        else {
+          if (run >= 3) for (let k = r - run; k < r; k++) set.add(`${k},${c}`);
+          run = 1;
+        }
+      }
+    }
+    return set;
+  }
+
+  async function cascade(initialMatches, countScore) {
+    let matches = initialMatches;
+    let chain = 1;
+    while (matches.size > 0) {
+      if (countScore) {
+        const bonus = matches.size >= 5 ? 2.2 : matches.size >= 4 ? 1.55 : 1;
+        score += Math.round(matches.size * 55 * chain * bonus);
+      }
+      render(matches);
+      await wait(185);
+      for (const key of matches) {
+        const [r,c] = key.split(',').map(Number);
+        grid[r][c] = null;
+      }
+      const drops = collapse();
+      render(new Set(), drops);
+      await wait(160);
+      matches = findMatches();
+      chain++;
+    }
+    ensureMoveExists();
+    render();
+  }
+
+  function collapse() {
+    const dropSet = new Set();
+    for (let c = 0; c < SIZE; c++) {
+      const col = [];
+      for (let r = SIZE - 1; r >= 0; r--) if (grid[r][c] != null) col.push(grid[r][c]);
+      while (col.length < SIZE) col.push(randCandy());
+      for (let r = SIZE - 1, i = 0; r >= 0; r--, i++) {
+        if (grid[r][c] !== col[i]) dropSet.add(`${r},${c}`);
+        grid[r][c] = col[i];
+      }
+    }
+    return dropSet;
+  }
+
+  async function resolveInitialMatches() {
+    busy = true;
+    let matches = findMatches();
+    while (matches.size > 0) {
+      await cascade(matches, false);
+      matches = findMatches();
+    }
+    busy = false;
+  }
+
+  function hasPossibleMove() {
+    for (let r = 0; r < SIZE; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        const a = {r,c};
+        for (const [dr,dc] of [[1,0],[0,1]]) {
+          const b = {r:r+dr,c:c+dc};
+          if (!inBounds(b.r,b.c)) continue;
+          swap(a,b);
+          const ok = findMatches().size > 0;
+          swap(a,b);
+          if (ok) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  function ensureMoveExists() {
+    let guard = 0;
+    while (!hasPossibleMove() && guard++ < 20) shuffleGrid(false);
+  }
+
+  function shuffleGrid(costMove = true) {
+    const flat = grid.flat();
+    for (let i = flat.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [flat[i], flat[j]] = [flat[j], flat[i]];
+    }
+    for (let r = 0; r < SIZE; r++) for (let c = 0; c < SIZE; c++) grid[r][c] = flat[idx(r,c)];
+    if (findMatches().size > 0 || !hasPossibleMove()) makeBoard();
+    if (costMove && moves > 0) moves--;
+    render();
+    checkLevelState();
+  }
+
+  function checkLevelState() {
+    render();
+    if (score >= target) {
+      modalTitle.textContent = 'Level Clear!';
+      modalText.textContent = `You beat level ${level} with ${moves} move${moves === 1 ? '' : 's'} left. Level ${level + 1} will be tougher.`;
+      modalBtn.textContent = 'Next Level';
+      modalBtn.onclick = () => { modal.classList.remove('show'); startLevel(level + 1); };
+      modal.classList.add('show');
+    } else if (moves <= 0) {
+      modalTitle.textContent = 'Out of Moves';
+      modalText.textContent = `You reached ${score.toLocaleString()} of ${target.toLocaleString()}. Try level ${level} again.`;
+      modalBtn.textContent = 'Retry Level';
+      modalBtn.onclick = () => { modal.classList.remove('show'); startLevel(level); };
+      modal.classList.add('show');
+    }
+  }
+
+  shuffleBtn.addEventListener('click', () => { if (!busy) shuffleGrid(true); });
+  newGameBtn.addEventListener('click', () => { modal.classList.remove('show'); startLevel(1); });
+  startLevel(1);
+})();
+</script>
+</body>
+</html>
