@@ -101,6 +101,8 @@
   }
   @media (hover: hover) { .tile:hover { transform: translateY(-2px) scale(1.03); filter: brightness(1.1); } }
   .tile.selected { outline: 4px solid #fff; transform: scale(1.08); filter: saturate(1.4) brightness(1.18); }
+  .tile.power { position: relative; outline: 2px solid rgba(255,255,255,.65); }
+  .tile.power::after { content: attr(data-power); position: absolute; right: 4px; bottom: 2px; font-size: calc(var(--tile) * .28); filter: drop-shadow(0 2px 1px rgba(0,0,0,.35)); }
   .tile.pop { transform: scale(.05) rotate(25deg); opacity: 0; }
   .tile.drop { animation: drop .18s ease-out; }
   @keyframes drop { from { transform: translateY(-22px); opacity: .2; } to { transform: translateY(0); opacity: 1; } }
@@ -159,7 +161,7 @@
     <div class="top">
       <div>
         <h1>Sweet Smash</h1>
-        <div class="subtitle">Swipe candies. Clear endless levels.</div>
+        <div class="subtitle">Swipe candies. Clear endless levels. Saves automatically.</div>
       </div>
       <button class="action" id="newGameBtn">New Game</button>
     </div>
@@ -179,7 +181,7 @@
           <button class="action" id="shuffleBtn">Shuffle</button>
         </div>
         <div class="progressOuter"><div id="progressBar"></div></div>
-        <div class="hint">Swipe a candy up, down, left, or right to swap. Tap-to-select still works. Matches of 4+ and chain reactions give bigger bonuses, but score targets climb fast.</div>
+        <div class="hint">Swipe a candy up, down, left, or right to swap. Progress saves automatically. Powerups unlock later: striped candies clear rows/columns, bombs clear nearby candies.</div>
       </div>
     </div>
   </div>
@@ -195,6 +197,7 @@
 <script>
 (() => {
   const SIZE = 8;
+  const SAVE_KEY = 'sweetSmashSaveV2';
   const candies = ['🍒','🍋','🍇','🍬','🍭','🧁','🍫','🍩'];
   const boardEl = document.getElementById('board');
   const levelEl = document.getElementById('levelEl');
@@ -213,45 +216,85 @@
   let selected = null;
   let level = 1;
   let score = 0;
-  let target = 5000;
-  let moves = 20;
+  let target = 12000;
+  let moves = 22;
   let busy = false;
   let available = 5;
 
   const wait = ms => new Promise(r => setTimeout(r, ms));
-  const randCandy = () => Math.floor(Math.random() * available);
   const idx = (r,c) => r * SIZE + c;
   const inBounds = (r,c) => r >= 0 && c >= 0 && r < SIZE && c < SIZE;
   const adjacent = (a,b) => Math.abs(a.r-b.r) + Math.abs(a.c-b.c) === 1;
+  const cell = (color, power = null) => ({ color, power });
+  const cloneGrid = g => g.map(row => row.map(x => x ? cell(x.color, x.power || null) : null));
+  const randColor = () => Math.floor(Math.random() * available);
 
   function difficultyFor(lvl) {
     available = Math.min(5 + Math.floor((lvl - 1) / 4), candies.length);
-    target = Math.round(4200 + lvl * 950 + Math.pow(lvl, 1.55) * 650);
-    moves = Math.max(12, 24 - Math.floor(lvl / 4));
+    target = Math.round(9500 + lvl * 2600 + Math.pow(lvl, 1.72) * 1450);
+    moves = Math.max(12, 24 - Math.floor(lvl / 5));
   }
 
-  function startLevel(lvl) {
+  function saveGame() {
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify({ level, score, target, moves, available, grid }));
+    } catch (_) {}
+  }
+
+  function loadGame() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
+      if (!saved || !Array.isArray(saved.grid) || saved.grid.length !== SIZE) return false;
+      level = saved.level || 1;
+      score = saved.score || 0;
+      moves = saved.moves || 20;
+      difficultyFor(level);
+      target = saved.target || target;
+      grid = cloneGrid(saved.grid);
+      selected = null;
+      busy = false;
+      render();
+      resolveInitialMatches(false);
+      return true;
+    } catch (_) { return false; }
+  }
+
+  function startLevel(lvl, fresh = true) {
     level = lvl;
     difficultyFor(level);
-    score = 0;
+    if (fresh) score = 0;
     selected = null;
     busy = false;
     makeBoard();
     render();
-    resolveInitialMatches();
+    saveGame();
+    resolveInitialMatches(false);
   }
 
   function makeBoard() {
-    grid = Array.from({ length: SIZE }, () => Array(SIZE).fill(0));
+    grid = Array.from({ length: SIZE }, () => Array(SIZE).fill(null));
     for (let r = 0; r < SIZE; r++) {
       for (let c = 0; c < SIZE; c++) {
         let val;
-        do { val = randCandy(); }
-        while ((c >= 2 && grid[r][c-1] === val && grid[r][c-2] === val) ||
-               (r >= 2 && grid[r-1][c] === val && grid[r-2][c] === val));
-        grid[r][c] = val;
+        do { val = randColor(); }
+        while ((c >= 2 && grid[r][c-1]?.color === val && grid[r][c-2]?.color === val) ||
+               (r >= 2 && grid[r-1][c]?.color === val && grid[r-2][c]?.color === val));
+        grid[r][c] = cell(val, randomSpawnPower());
       }
     }
+  }
+
+  function randomSpawnPower() {
+    if (level < 4) return null;
+    const roll = Math.random();
+    if (level >= 10 && roll < Math.min(.035, .012 + level * .0015)) return 'bomb';
+    if (level >= 7 && roll < Math.min(.07, .025 + level * .002)) return Math.random() < .5 ? 'row' : 'col';
+    if (level >= 4 && roll < Math.min(.045, .018 + level * .0015)) return Math.random() < .5 ? 'row' : 'col';
+    return null;
+  }
+
+  function powerSymbol(power) {
+    return power === 'row' ? '↔' : power === 'col' ? '↕' : power === 'bomb' ? '💥' : '';
   }
 
   function render(popSet = new Set(), dropSet = new Set()) {
@@ -263,7 +306,9 @@
         btn.type = 'button';
         btn.dataset.r = r;
         btn.dataset.c = c;
-        btn.textContent = grid[r][c] == null ? '' : candies[grid[r][c]];
+        const piece = grid[r][c];
+        btn.textContent = piece ? candies[piece.color] : '';
+        if (piece?.power) { btn.classList.add('power'); btn.dataset.power = powerSymbol(piece.power); }
         const key = `${r},${c}`;
         if (selected && selected.r === r && selected.c === c) btn.classList.add('selected');
         if (popSet.has(key)) btn.classList.add('pop');
@@ -278,7 +323,6 @@
     movesEl.textContent = moves;
     progressBar.style.width = `${Math.min(100, score / target * 100)}%`;
   }
-
 
   let swipeStart = null;
   const swipeThreshold = 24;
@@ -316,24 +360,10 @@
 
   function onTileClick(e) {
     if (busy) return;
-    const r = +e.currentTarget.dataset.r;
-    const c = +e.currentTarget.dataset.c;
-    const clicked = { r, c };
-    if (!selected) {
-      selected = clicked;
-      render();
-      return;
-    }
-    if (selected.r === r && selected.c === c) {
-      selected = null;
-      render();
-      return;
-    }
-    if (!adjacent(selected, clicked)) {
-      selected = clicked;
-      render();
-      return;
-    }
+    const clicked = { r: +e.currentTarget.dataset.r, c: +e.currentTarget.dataset.c };
+    if (!selected) { selected = clicked; render(); return; }
+    if (selected.r === clicked.r && selected.c === clicked.c) { selected = null; render(); return; }
+    if (!adjacent(selected, clicked)) { selected = clicked; render(); return; }
     swapAndResolve(selected, clicked);
   }
 
@@ -342,8 +372,8 @@
     swap(a,b);
     selected = null;
     render();
-    await wait(120);
-    const matches = findMatches();
+    await wait(110);
+    let matches = findMatches();
     if (matches.size === 0) {
       swap(a,b);
       render();
@@ -351,9 +381,10 @@
       return;
     }
     moves--;
-    await cascade(matches, true);
+    await cascade(matches, true, pickCreatedPower(matches, b, a));
     checkLevelState();
     busy = false;
+    saveGame();
   }
 
   function swap(a,b) {
@@ -364,51 +395,99 @@
 
   function findMatches() {
     const set = new Set();
+    const runs = [];
     for (let r = 0; r < SIZE; r++) {
-      let run = 1;
+      let runStart = 0;
       for (let c = 1; c <= SIZE; c++) {
-        if (c < SIZE && grid[r][c] != null && grid[r][c] === grid[r][c-1]) run++;
-        else {
-          if (run >= 3) for (let k = c - run; k < c; k++) set.add(`${r},${k}`);
-          run = 1;
+        if (c < SIZE && grid[r][c] && grid[r][c-1] && grid[r][c].color === grid[r][c-1].color) continue;
+        const len = c - runStart;
+        if (len >= 3) {
+          const keys = [];
+          for (let k = runStart; k < c; k++) { set.add(`${r},${k}`); keys.push(`${r},${k}`); }
+          runs.push({ dir:'row', len, keys });
         }
+        runStart = c;
       }
     }
     for (let c = 0; c < SIZE; c++) {
-      let run = 1;
+      let runStart = 0;
       for (let r = 1; r <= SIZE; r++) {
-        if (r < SIZE && grid[r][c] != null && grid[r][c] === grid[r-1][c]) run++;
-        else {
-          if (run >= 3) for (let k = r - run; k < r; k++) set.add(`${k},${c}`);
-          run = 1;
+        if (r < SIZE && grid[r][c] && grid[r-1][c] && grid[r][c].color === grid[r-1][c].color) continue;
+        const len = r - runStart;
+        if (len >= 3) {
+          const keys = [];
+          for (let k = runStart; k < r; k++) { set.add(`${k},${c}`); keys.push(`${k},${c}`); }
+          runs.push({ dir:'col', len, keys });
         }
+        runStart = r;
       }
     }
+    set.runs = runs;
     return set;
   }
 
-  async function cascade(initialMatches, countScore) {
+  function pickCreatedPower(matches, preferred, backup) {
+    if (level < 4 || !matches.runs) return null;
+    const big = matches.runs.find(run => run.len >= 5) || matches.runs.find(run => run.len >= 4);
+    if (!big) return null;
+    const prefKey = `${preferred.r},${preferred.c}`;
+    const backKey = `${backup.r},${backup.c}`;
+    let key = big.keys.includes(prefKey) ? prefKey : big.keys.includes(backKey) ? backKey : big.keys[Math.floor(big.keys.length / 2)];
+    return { key, power: big.len >= 5 && level >= 10 ? 'bomb' : (big.dir === 'row' ? 'row' : 'col') };
+  }
+
+  function expandPowerups(matches) {
+    const out = new Set(matches);
+    const queue = [...matches];
+    while (queue.length) {
+      const key = queue.pop();
+      const [r,c] = key.split(',').map(Number);
+      const piece = grid[r][c];
+      if (!piece?.power) continue;
+      const adds = [];
+      if (piece.power === 'row') for (let cc = 0; cc < SIZE; cc++) adds.push(`${r},${cc}`);
+      if (piece.power === 'col') for (let rr = 0; rr < SIZE; rr++) adds.push(`${rr},${c}`);
+      if (piece.power === 'bomb') {
+        for (let rr = r - 1; rr <= r + 1; rr++) for (let cc = c - 1; cc <= c + 1; cc++) if (inBounds(rr,cc)) adds.push(`${rr},${cc}`);
+      }
+      for (const add of adds) if (!out.has(add)) { out.add(add); queue.push(add); }
+    }
+    return out;
+  }
+
+  async function cascade(initialMatches, countScore, created = null) {
     let matches = initialMatches;
     let chain = 1;
     while (matches.size > 0) {
+      matches = expandPowerups(matches);
+      let keep = null;
+      if (created && matches.has(created.key)) keep = created;
       if (countScore) {
-        const bonus = matches.size >= 5 ? 2.2 : matches.size >= 4 ? 1.55 : 1;
-        score += Math.round(matches.size * 55 * chain * bonus);
+        const powerBonus = [...matches].some(k => grid[+k.split(',')[0]][+k.split(',')[1]]?.power) ? 1.35 : 1;
+        const bonus = matches.size >= 8 ? 2.6 : matches.size >= 5 ? 2.1 : matches.size >= 4 ? 1.55 : 1;
+        score += Math.round(matches.size * 125 * chain * bonus * powerBonus);
       }
       render(matches);
       await wait(185);
       for (const key of matches) {
-        const [r,c] = key.split(',').map(Number);
-        grid[r][c] = null;
+        if (keep && key === keep.key) {
+          const [r,c] = key.split(',').map(Number);
+          grid[r][c] = cell(grid[r][c]?.color ?? randColor(), keep.power);
+        } else {
+          const [r,c] = key.split(',').map(Number);
+          grid[r][c] = null;
+        }
       }
+      created = null;
       const drops = collapse();
       render(new Set(), drops);
-      await wait(160);
+      await wait(150);
       matches = findMatches();
       chain++;
     }
     ensureMoveExists();
     render();
+    saveGame();
   }
 
   function collapse() {
@@ -416,23 +495,24 @@
     for (let c = 0; c < SIZE; c++) {
       const col = [];
       for (let r = SIZE - 1; r >= 0; r--) if (grid[r][c] != null) col.push(grid[r][c]);
-      while (col.length < SIZE) col.push(randCandy());
+      while (col.length < SIZE) col.push(cell(randColor(), randomSpawnPower()));
       for (let r = SIZE - 1, i = 0; r >= 0; r--, i++) {
-        if (grid[r][c] !== col[i]) dropSet.add(`${r},${c}`);
+        if (!grid[r][c] || grid[r][c].color !== col[i].color || grid[r][c].power !== col[i].power) dropSet.add(`${r},${c}`);
         grid[r][c] = col[i];
       }
     }
     return dropSet;
   }
 
-  async function resolveInitialMatches() {
+  async function resolveInitialMatches(countScore = false) {
     busy = true;
     let matches = findMatches();
     while (matches.size > 0) {
-      await cascade(matches, false);
+      await cascade(matches, countScore);
       matches = findMatches();
     }
     busy = false;
+    saveGame();
   }
 
   function hasPossibleMove() {
@@ -467,14 +547,16 @@
     if (findMatches().size > 0 || !hasPossibleMove()) makeBoard();
     if (costMove && moves > 0) moves--;
     render();
+    saveGame();
     checkLevelState();
   }
 
   function checkLevelState() {
     render();
+    saveGame();
     if (score >= target) {
       modalTitle.textContent = 'Level Clear!';
-      modalText.textContent = `You beat level ${level} with ${moves} move${moves === 1 ? '' : 's'} left. Level ${level + 1} will be tougher.`;
+      modalText.textContent = `Saved. You beat level ${level} with ${moves} move${moves === 1 ? '' : 's'} left. Powerups become more common as levels rise.`;
       modalBtn.textContent = 'Next Level';
       modalBtn.onclick = () => { modal.classList.remove('show'); startLevel(level + 1); };
       modal.classList.add('show');
@@ -493,8 +575,14 @@
   boardEl.addEventListener('pointerup', e => { if (e.pointerType !== 'touch') onSwipeEnd(e); });
 
   shuffleBtn.addEventListener('click', () => { if (!busy) shuffleGrid(true); });
-  newGameBtn.addEventListener('click', () => { modal.classList.remove('show'); startLevel(1); });
-  startLevel(1);
+  newGameBtn.addEventListener('click', () => {
+    if (!confirm('Start over from level 1? This clears your saved Sweet Smash progress.')) return;
+    localStorage.removeItem(SAVE_KEY);
+    modal.classList.remove('show');
+    startLevel(1);
+  });
+
+  if (!loadGame()) startLevel(1);
 })();
 </script>
 </body>
