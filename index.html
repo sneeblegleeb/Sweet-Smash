@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Sweet Cascade - Infinite Match 3</title>
+<title>Sweet Smash - Infinite Match 3</title>
 <style>
   :root {
     --bg1: #21142f;
@@ -19,6 +19,7 @@
   body {
     margin: 0;
     min-height: 100vh;
+    min-height: 100dvh;
     font-family: ui-rounded, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     color: var(--text);
     background:
@@ -26,12 +27,13 @@
       radial-gradient(circle at bottom right, rgba(6,214,160,.25), transparent 30%),
       linear-gradient(135deg, var(--bg1), var(--bg2));
     display: grid;
-    place-items: center;
+    place-items: start center;
     overflow-x: hidden;
+    overscroll-behavior: none;
   }
   .wrap {
-    width: min(100vw, 760px);
-    padding: 18px;
+    width: min(100vw, 540px);
+    padding: 12px;
   }
   .top {
     display: grid;
@@ -97,7 +99,7 @@
     box-shadow: inset 0 4px 10px rgba(255,255,255,.38), inset 0 -7px 13px rgba(0,0,0,.16), 0 7px 0 rgba(0,0,0,.14);
     transition: transform .13s ease, filter .13s ease, opacity .2s ease;
   }
-  .tile:hover { transform: translateY(-2px) scale(1.03); filter: brightness(1.1); }
+  @media (hover: hover) { .tile:hover { transform: translateY(-2px) scale(1.03); filter: brightness(1.1); } }
   .tile.selected { outline: 4px solid #fff; transform: scale(1.08); filter: saturate(1.4) brightness(1.18); }
   .tile.pop { transform: scale(.05) rotate(25deg); opacity: 0; }
   .tile.drop { animation: drop .18s ease-out; }
@@ -131,9 +133,24 @@
   .modalBox h2 { margin: 0 0 8px; font-size: 38px; }
   .modalBox p { color: var(--muted); font-weight: 700; }
   @media (max-width: 560px) {
-    :root { --tile: min(10.7vw, 52px); --gap: 5px; }
-    .stats { grid-template-columns: repeat(2, 1fr); }
-    .top { grid-template-columns: 1fr; }
+    :root { --tile: min(10.8vw, 48px); --gap: 5px; }
+    .wrap { padding: 10px; }
+    .top { grid-template-columns: 1fr auto; gap: 8px; }
+    .subtitle { font-size: 13px; }
+    .stats { grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 10px 0; }
+    .card { padding: 8px 4px; border-radius: 15px; }
+    .label { font-size: 9px; letter-spacing: .5px; }
+    .value { font-size: clamp(17px, 5vw, 22px); }
+    #board { border-radius: 20px; }
+    .tile { border-radius: 14px; font-size: calc(var(--tile) * .56); }
+    .controls { padding: 10px; }
+    .hint { font-size: 12px; }
+    button.action { padding: 10px 12px; border-radius: 13px; }
+  }
+  @media (max-height: 720px) and (max-width: 560px) {
+    :root { --tile: min(10.2vw, 44px); --gap: 4px; }
+    .subtitle, .hint { display: none; }
+    .controls { gap: 8px; }
   }
 </style>
 </head>
@@ -141,8 +158,8 @@
   <div class="wrap">
     <div class="top">
       <div>
-        <h1>Sweet Cascade</h1>
-        <div class="subtitle">An infinite match‑3 candy puzzle</div>
+        <h1>Sweet Smash</h1>
+        <div class="subtitle">Swipe candies. Clear endless levels.</div>
       </div>
       <button class="action" id="newGameBtn">New Game</button>
     </div>
@@ -150,7 +167,7 @@
     <div class="stats">
       <div class="card"><div class="label">Level</div><div class="value" id="levelEl">1</div></div>
       <div class="card"><div class="label">Score</div><div class="value" id="scoreEl">0</div></div>
-      <div class="card"><div class="label">Target</div><div class="value" id="targetEl">750</div></div>
+      <div class="card"><div class="label">Target</div><div class="value" id="targetEl">5,000</div></div>
       <div class="card"><div class="label">Moves</div><div class="value" id="movesEl">20</div></div>
     </div>
 
@@ -162,7 +179,7 @@
           <button class="action" id="shuffleBtn">Shuffle</button>
         </div>
         <div class="progressOuter"><div id="progressBar"></div></div>
-        <div class="hint">Click or tap one candy, then an adjacent candy to swap. Matches of 4+ create bigger chain bonuses. Each level raises the target, trims moves over time, and adds more candy variety.</div>
+        <div class="hint">Swipe a candy up, down, left, or right to swap. Tap-to-select still works. Matches of 4+ and chain reactions give bigger bonuses, but score targets climb fast.</div>
       </div>
     </div>
   </div>
@@ -196,7 +213,7 @@
   let selected = null;
   let level = 1;
   let score = 0;
-  let target = 750;
+  let target = 5000;
   let moves = 20;
   let busy = false;
   let available = 5;
@@ -209,8 +226,8 @@
 
   function difficultyFor(lvl) {
     available = Math.min(5 + Math.floor((lvl - 1) / 4), candies.length);
-    target = Math.round(650 + lvl * 220 + Math.pow(lvl, 1.35) * 95);
-    moves = Math.max(10, 22 - Math.floor(lvl / 3));
+    target = Math.round(4200 + lvl * 950 + Math.pow(lvl, 1.55) * 650);
+    moves = Math.max(12, 24 - Math.floor(lvl / 4));
   }
 
   function startLevel(lvl) {
@@ -260,6 +277,41 @@
     targetEl.textContent = target.toLocaleString();
     movesEl.textContent = moves;
     progressBar.style.width = `${Math.min(100, score / target * 100)}%`;
+  }
+
+
+  let swipeStart = null;
+  const swipeThreshold = 24;
+
+  function pointToTile(clientX, clientY) {
+    const el = document.elementFromPoint(clientX, clientY);
+    const tile = el && el.closest ? el.closest('.tile') : null;
+    if (!tile || !boardEl.contains(tile)) return null;
+    return { r: +tile.dataset.r, c: +tile.dataset.c };
+  }
+
+  function onSwipeStart(e) {
+    if (busy) return;
+    const t = e.touches ? e.touches[0] : e;
+    const tile = pointToTile(t.clientX, t.clientY);
+    if (!tile) return;
+    swipeStart = { ...tile, x: t.clientX, y: t.clientY };
+  }
+
+  function onSwipeEnd(e) {
+    if (busy || !swipeStart) return;
+    const t = e.changedTouches ? e.changedTouches[0] : e;
+    const dx = t.clientX - swipeStart.x;
+    const dy = t.clientY - swipeStart.y;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < swipeThreshold) { swipeStart = null; return; }
+    const dir = Math.abs(dx) > Math.abs(dy)
+      ? { dr: 0, dc: dx > 0 ? 1 : -1 }
+      : { dr: dy > 0 ? 1 : -1, dc: 0 };
+    const a = { r: swipeStart.r, c: swipeStart.c };
+    const b = { r: a.r + dir.dr, c: a.c + dir.dc };
+    swipeStart = null;
+    selected = null;
+    if (inBounds(b.r, b.c)) swapAndResolve(a, b);
   }
 
   function onTileClick(e) {
@@ -434,6 +486,11 @@
       modal.classList.add('show');
     }
   }
+
+  boardEl.addEventListener('touchstart', onSwipeStart, { passive: true });
+  boardEl.addEventListener('touchend', onSwipeEnd, { passive: true });
+  boardEl.addEventListener('pointerdown', e => { if (e.pointerType !== 'touch') onSwipeStart(e); });
+  boardEl.addEventListener('pointerup', e => { if (e.pointerType !== 'touch') onSwipeEnd(e); });
 
   shuffleBtn.addEventListener('click', () => { if (!busy) shuffleGrid(true); });
   newGameBtn.addEventListener('click', () => { modal.classList.remove('show'); startLevel(1); });
